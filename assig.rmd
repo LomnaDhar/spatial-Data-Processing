@@ -1,0 +1,99 @@
+
+Importing Required Library
+
+```{r}
+library(sf)
+library(tidyverse)
+library(dplyr)
+library(spdep)
+library(tmap)
+data(world)
+```
+
+Importing the data-set
+Manipulating the data set.
+
+```{r}
+data <- read.csv("C:/Users/Asus/Downloads/tsunami_dataset.csv")
+n_data<- data %>% drop_na("TS_INTENSITY")
+n_data<- n_data %>% select(-one_of('LOCATION_NAME', 'EQ_MAGNITUDE','EQ_DEPTH','EVENT_VALIDITY','REGION','URL','COMMENTS','MINUTE','HOUR','DAY','MONTH'))
+head(n_data)
+```
+
+Converting df to sp
+
+```{r}
+g_data<- st_as_sf(x = n_data, 
+        coords = c("LONGITUDE", "LATITUDE"),
+         crs = "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+head(g_data)
+```
+
+Plotting the data
+
+```{r}
+tm_shape(World)+
+  tm_borders()+
+  tm_shape(g_data)+
+  tm_symbols(col = "red", size = "TS_INTENSITY")
+```
+
+Finding the Nearest Neighbors
+
+```{r}
+knea <- knearneigh(g_data, k=5,  longlat = TRUE)
+neib <- knn2nb(knea)
+neib_weig <- nb2listw(neib, style="W", zero.policy=TRUE)
+```
+
+Plotting the moran plot.
+
+```{r}
+moran.plot(g_data$TS_INTENSITY,neib_weig,labels = g_data$ID, cex=0.5, pch =".", xlab = "Tsunami Intensity", ylab = "lagged Intensity" )
+```
+
+Moran Test.
+
+```{r}
+moran.test(g_data$TS_INTENSITY,neib_weig)
+```
+
+Local Moran Test
+Manuplating the dataset
+
+```{r}
+lo_mo<-localmoran(g_data$TS_INTENSITY, neib_weig)
+lo_mo_df<- as.data.frame(lo_mo)
+g_data$loc_mor<-lo_mo_df$Ii
+g_data$loc_p_val<-lo_mo_df$`Pr(z != E(Ii))`
+```
+
+Plotting the local Moran I's
+
+```{r}
+tm_shape(World)+
+     tm_borders()+
+     tm_shape(g_data)+
+     tm_symbols(col = "red", size = "loc_mor")
+```
+
+Plotting the p-vales
+
+```{r}
+tm_shape(World)+
+     tm_borders()+
+     tm_shape(g_data)+
+     tm_symbols(col = "red", size = "loc_p_val")
+```
+
+Extracting the location which are prone to High intensity tsunami.
+
+```{r}
+g_data_sig<- g_data[g_data$loc_p_val >= .05,]
+g_data_sig<- g_data_sig[g_data_sig$loc_mor >= 0.8,]
+tm_shape(World)+
+     tm_borders()+
+     tm_shape(g_data_sig)+
+     tm_symbols(col = "red", size = "loc_mor")
+```
+
